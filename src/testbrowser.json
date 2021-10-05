@@ -1,0 +1,12 @@
+{
+    "KPlugin": {
+        "Description": "TestBrowser",
+        "Id": "testbrowser",
+        "Name": "TestBrowser",
+        "ServiceTypes": [
+            "KDevelop/Plugin"
+        ]
+    },
+    "X-KDevelop-Category": "Global",
+    "X-KDevelop-Mode": "GUI"
+}
