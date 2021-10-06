@@ -24,7 +24,13 @@ struct ITestData
 {   
     virtual ~ITestData() = default;
     
+    virtual std::string getProjectName() const = 0;
+    virtual std::string getTestHostName() const = 0;
+    virtual std::string getTestCaseName() const = 0;
+    virtual std::string getTestName() const = 0;
+    
     virtual TestState getState() const = 0;
+    virtual std::string getHtmlDetailMessage() const = 0;
 
     virtual void start() = 0;
     virtual void execute() = 0;

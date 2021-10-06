@@ -5,7 +5,6 @@
 #include <QTextBlock>
 #include <QAbstractTextDocumentLayout>
 #include "utilities.h"
-#include "GoogleTestMessage.h"
 
 InfoTextDelegate::InfoTextDelegate(QTreeView* parent)
 : QStyledItemDelegate(parent), _parent(parent)
@@ -22,7 +21,7 @@ void InfoTextDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opti
     
     auto&& textDocument = QTextDocument();
     
-    textDocument.setHtml(GoogleTestMessage().toHtml(index.data().toString().toStdString()).c_str());
+    //textDocument.setHtml(GoogleTestMessage().toHtml(index.data().toString().toStdString()).c_str());
 
     auto context = QAbstractTextDocumentLayout::PaintContext();
     

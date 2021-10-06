@@ -13,6 +13,8 @@
 #include <interfaces/itestcontroller.h>
 #include <interfaces/itestsuite.h>
 #include <interfaces/iruncontroller.h>
+#include <interfaces/idebugcontroller.h>
+#include <debugger/interfaces/idebugsession.h>
 #include <interfaces/idocumentcontroller.h>
 #include <interfaces/isession.h>
 
@@ -45,10 +47,8 @@
 
 #include "TestDataJob.h"
 #include "InfoTextDelegate.h"
-#include "InfoTextPainter.h"
 
 #include <string>
-#include "GoogleTestMessage.h"
 
 using namespace KDevelop;
 //using namespace std::literals::string_literals;
@@ -100,7 +100,6 @@ TestView::TestView(TestBrowser* plugin, QWidget* parent)
     m_tree->setModel(m_filter);
     m_tree->header()->setSectionResizeMode(QHeaderView::ResizeMode::ResizeToContents);
     m_tree->setItemDelegateForColumn(2, new InfoTextDelegate(m_tree));
-    //m_tree->setPainter(2, new InfoTextPainter());
     
     auto showSource = new QAction( QIcon::fromTheme(QStringLiteral("code-context")), i18nc("@action:inmenu", "Show Source"), this );
     //connect (showSource, &QAction::triggered, this, &TestView::showSource);
@@ -116,6 +115,10 @@ TestView::TestView(TestBrowser* plugin, QWidget* parent)
     auto runSelected = new QAction( QIcon::fromTheme(QStringLiteral("system-run")), i18nc("@action", "Run Selected Tests"), this );
     connect (runSelected, &QAction::triggered, this, &TestView::runSelectedTests);
     addAction(runSelected);
+
+    auto debugSelected = new QAction( QIcon::fromTheme(QStringLiteral("system-run")), i18nc("@action", "Debug Selected Tests"), this );
+    connect (debugSelected, &QAction::triggered, this, &TestView::debugSelectedTests);
+    addAction(debugSelected);
 
     auto edit = new QLineEdit(parent);
     edit->setPlaceholderText(i18nc("@info:placeholder", "Filter..."));
@@ -174,12 +177,7 @@ void TestView::onItemClicked(const QModelIndex& index)
         trace("has TestData");
         trace("print info");
 
-        const auto& message = testdata->getState().message;
-        
-        if(message.empty())
-            _textBrowser->setHtml("No information");
-        else
-            _textBrowser->setHtml(GoogleTestMessage().toHtml(message).c_str());
+        _textBrowser->setHtml(testdata->getHtmlDetailMessage().c_str());
     }
 }
 
@@ -199,7 +197,6 @@ void TestView::showSource(const std::string& file, int line)
     qCDebug(PLUGIN_TESTBROWSER) << "Activating declaration in" << file.c_str();
     
     documentController->openDocument(QUrl(("file://" + file).c_str()), KTextEditor::Cursor(line, 0));
-
 }
 
 void TestView::showSource()
@@ -324,6 +321,11 @@ QStandardItem* TestView::itemForProject(IProject* project)
     }
     
     return addProject(project);
+}
+
+void TestView::debugSelectedTests()
+{
+
 }
 
 void TestView::runSelectedTests()

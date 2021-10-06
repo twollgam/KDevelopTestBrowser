@@ -13,9 +13,106 @@ GoogleTestData::GoogleTestData(const std::string& executable, const std::string&
 {
 }
  
+std::string GoogleTestData::getProjectName() const 
+{
+    return {};
+}
+
+std::string GoogleTestData::getTestHostName() const
+{
+    return _executable;
+}
+
+
+std::string GoogleTestData::getTestCaseName() const
+{
+    return _testcase;
+}
+
+std::string GoogleTestData::getTestName() const
+{
+    return _testname;
+}
+
 TestState GoogleTestData::getState() const
 {
     return _state;
+}
+
+namespace
+{
+    std::string toHtml(const std::string& message)
+    {
+        //trace("toHtml: " + message);
+        auto html = message;
+        
+        for(auto position = html.find('/'); position != std::string::npos; position = html.find('/', position + 1))
+        {
+            auto colonPosition = html.find(':', position);
+            
+            if(colonPosition != std::string::npos)
+            {
+                auto endPosition = html.find_first_not_of("0123456789", colonPosition + 1);
+                
+                if(endPosition != std::string::npos)
+                {
+                    const auto url = html.substr(position, endPosition - position);
+                    
+                    //trace("url: " + url);
+                    
+                    html.insert(endPosition, "</a>");
+                    html.insert(position, "<a href=\"" + url + "\">");
+                    
+                    position = endPosition + 4 + 11 + url.size();
+
+                    //html.insert(endPosition, "</u>");
+                    //html.insert(position, "<u>");
+                    
+                    //position = endPosition + 4 + 3;
+                    
+                    continue;
+                }
+            }
+        }
+        
+        for(auto position = html.find_first_of("\n"); position != std::string::npos; position = html.find_first_of("\n", position))
+        {
+            html.replace(position, 1, "<br>");
+        }
+                
+        //trace("html: " + html);
+        return html;
+    }
+
+}
+
+std::string GoogleTestData::getHtmlDetailMessage() const
+{
+    if(_testname.empty())
+    {
+        const auto header = "Details of group: <b>" + getTestCaseName() + "</b><br><br>";
+        
+        return header;
+    }
+
+    const auto header = "Details of test: <b>" + getTestCaseName() + "." + getTestName() + "</b><br><br>";
+
+    if(_state.state != TestState::State::Stopped)
+        return header + "Running";
+    
+    if(_state.result == TestState::Result::Error)
+        return header + "Test failed<br><br>" + toHtml(_state.message);
+    
+    if(_state.result == TestState::Result::Passed)
+        return header + "Test success<br><br>" + toHtml(_state.message);
+    
+    if(_state.result == TestState::Result::Skipped)
+        return header + "Test skipped<br><br>" + toHtml(_state.message);
+
+    if(_state.result == TestState::Result::NotRun)
+        return header + "Test not run<br><br>" + toHtml(_state.message);
+
+    return header + "Unknown";
 }
 
 namespace
@@ -31,6 +128,18 @@ namespace
         {
             trace(line);
         
+            if(line.find("PASSED") != std::string::npos && line.find("0 tests.") != std::string::npos)
+            {
+                trace("detected skipped");
+
+                auto state = TestState();
+                
+                state.result = TestState::Result::Skipped;
+                state.state = TestState::State::Stopped;
+                
+                return state;
+            }
+            
             const auto position = line.find(id);
             
             if(position == std::string::npos)
@@ -148,27 +257,7 @@ std::list<KJob *> GoogleTestData::createJobs(QStandardItem* item)
 {
     auto jobs = std::list<KJob*>();
     
-    if(_testname.empty())
-    {        
-        auto parent = item;
-        
-        for(auto i = 0; i < parent->rowCount(); ++i)
-        {
-            auto item = parent->child(i);
-
-            if(item->data(TestDataRole).isValid())
-            {
-                trace("has TestData");
-                auto testdata = item->data(TestDataRole).value<TestDataPtr>();
-                trace("has TestData");
-                
-                if(testdata)
-                    jobs.push_back(new TestDataJob(*testdata, createItemList(item)));
-            }
-        }
-    }
-    else
-        jobs.push_back(new TestDataJob(*this, createItemList(item)));
+    jobs.push_back(new TestDataJob(*this, createItemList(item)));
     
     return jobs;
 }

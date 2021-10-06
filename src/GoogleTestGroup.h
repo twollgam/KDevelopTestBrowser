@@ -4,11 +4,11 @@
 
 #include <string>
 
-class GoogleTestData : public ITestData
+class GoogleTestGroup : public ITestData
 {
 public:
-    GoogleTestData(const std::string& executable, const std::string& testcase, const std::string& testname);
-    ~GoogleTestData() override = default;
+    GoogleTestGroup(const std::string& executable, const std::string& testcase);
+    ~GoogleTestGroup() override = default;
     
     std::string getProjectName() const override;
     std::string getTestHostName() const override;
@@ -23,10 +23,13 @@ public:
     
     std::list<KJob*> createJobs(QStandardItem*) override;
 
+    void addTest(const TestDataPtr&);
+    
 private:
     const std::string& _executable;
     const std::string _testcase;
-    const std::string _testname;
     TestState _state;
+    std::vector<TestDataPtr> _tests;
 };
+
 

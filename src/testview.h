@@ -25,7 +25,6 @@ public:
     ~TestView() override;
 
 public Q_SLOTS:
-    void runSelectedTests();
     void showSource();
 
     void addTestSuite(KDevelop::ITestSuite* suite);
@@ -40,6 +39,8 @@ public Q_SLOTS:
     QList<QAction*> contextMenuActions();
 
 private:
+    void runSelectedTests();
+    void debugSelectedTests();
     void changeFilter(const QString &newFilter);
     void anchorClicked(const QUrl& link);
     void showSource(const std::string& file, int line);

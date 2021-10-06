@@ -10,6 +10,7 @@
 #include "GoogleTestData.h"
 #include "IconManager.h"
 #include "Roles.h"
+#include "GoogleTestGroup.h"
 
 GoogleTestRunner::GoogleTestRunner(const std::string& path, const KDevelop::ITestSuite& suite)
 : _suite(suite), _path(path)
@@ -74,11 +75,11 @@ void GoogleTestRunner::load(QStandardItem& item)
     for(const auto& testcase : _tests)
     {
         auto testcaseItem = new QStandardItem(manager.getIcon(KDevelop::TestResult::NotRun), testcase.first.c_str());
+        auto testgroup = std::make_shared<GoogleTestGroup>(_path, testcase.first);
         {
             auto data = QVariant();
-            auto testdata = TestDataPtr(std::make_shared<GoogleTestData>(_path, testcase.first));
             
-            data.setValue(testdata);
+            data.setValue(TestDataPtr(testgroup));
             testcaseItem->setData(data, TestDataRole);
             testcaseItem->setData(testcase.first.c_str(), SuiteRole);
             item.appendRow(testcaseItem);
@@ -89,9 +90,11 @@ void GoogleTestRunner::load(QStandardItem& item)
             const auto testname = test.substr(1);
             auto testItem = new QStandardItem(manager.getIcon(KDevelop::TestResult::NotRun), testname.c_str());
             auto data = QVariant();
-            auto testdata = TestDataPtr(std::make_shared<GoogleTestData>(_path, testcase.first, testname));
+            auto testdata = std::make_shared<GoogleTestData>(_path, testcase.first, testname);
+
+            testgroup->addTest(testdata);
             
-            data.setValue(testdata);
+            data.setValue(TestDataPtr(testdata));
             testItem->setData(data, TestDataRole);
             testItem->setData(testname.c_str(), CaseRole);
             
