@@ -7,6 +7,7 @@
 #include "utilities.h"
 #include "TestDataJob.h"
 #include "Roles.h"
+#include "IconManager.h"
 
 GoogleTest::GoogleTest(const std::string& executable, const std::string& name)
 : _executable(executable), _name(name)
@@ -190,6 +191,11 @@ void GoogleTest::start()
 {
     _state.state = TestState::State::Started;
     _state.result = TestState::Result::NotRun;
+
+    setIcon(IconManager().getIcon(_state));
+    
+    if(getParent())
+        getParent()->start();
 }
 
 void GoogleTest::execute() 
@@ -258,10 +264,26 @@ void GoogleTest::setItem(QStandardItem* item)
     _item = item;
 }
 
+void GoogleTest::setIcon(const QIcon& icon)
+{
+    auto item = getItem();
+
+    if(item)
+        item->setIcon(icon);
+}
+
 void GoogleTest::setTime(const std::string& text)
 {
+    if(!getItem() || !getItem()->parent() || !getItem()->row() || getItem()->parent()->columnCount() < 1)
+        return;
+
     auto item = getItem()->parent()->child(getItem()->row(), 1);
     
     if(item)
         item->setText(text.c_str());
+}
+
+std::string GoogleTest::getExecutable() const
+{
+    return _executable;
 }

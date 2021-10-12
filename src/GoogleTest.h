@@ -4,7 +4,7 @@
 
 #include <string>
 
-class GoogleTest : public ITest
+class GoogleTest : public virtual ITest
 {
 public:
     GoogleTest(const std::string& executable, const std::string& name);
@@ -27,7 +27,9 @@ public:
     void setItem(QStandardItem*) override;
 
 protected:
+    void setIcon(const QIcon&);
     void setTime(const std::string&);
+    std::string getExecutable() const;
     
 private:
     const std::string& _executable;

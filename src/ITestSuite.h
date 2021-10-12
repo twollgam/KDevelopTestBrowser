@@ -4,7 +4,7 @@
 
 #include <memory>
 
- struct ITestSuite : public ITest
+ struct ITestSuite : public virtual ITest
  {
      virtual ~ITestSuite() = default;
      

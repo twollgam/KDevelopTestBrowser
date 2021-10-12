@@ -117,12 +117,14 @@ void GoogleTestRunner::load(QStandardItem& item)
             const auto testname = dottedTestName.substr(1);
             auto test = std::make_shared<GoogleTest>(_path, testname);
 
-            testgroup->addTest(test);
+            testgroup->add(test);
             test->setParent(testgroup);
  
             create(test);
          }
     }
+    
+    suite->execute();
 }
 
 std::map<std::string, std::set<std::string> > GoogleTestRunner::loadTestNames(const std::string& path)

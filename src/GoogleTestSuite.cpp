@@ -6,41 +6,7 @@
 #include "GoogleTest.h"
 
 GoogleTestSuite::GoogleTestSuite(const std::string& executable, const std::string& name)
-: _executable(executable), _name(name)
-{
-}
-
-std::string GoogleTestSuite::getName() const
-{
-    return _name;
-}
-
-TestState GoogleTestSuite::getState() const
-{
-    return _state;
-}
-
-void GoogleTestSuite::execute()
-{
-    const auto parentItem = _item->parent();
-    auto item = parentItem->child(_item->row(), 1);
-    
-    auto duration = 0UL;
-    for(const auto& group : _tests)
-        for(const auto& test : group->getChildren())
-            duration += test->getState().durationInMilliseconds;
-    
-    if(duration == 0)
-        item->setText("< 1 ms");
-    else
-    {
-        const auto display = std::to_string(duration) + " ms";
-            
-        item->setText(display.c_str());
-    }
-}
-
-void GoogleTestSuite::start()
+: GoogleTestGroup(executable, name)
 {
 }
 
@@ -71,8 +37,8 @@ void GoogleTestSuite::update()
 {
     trace("GoogleTestSuite::update");
     
-    auto runner = GoogleTestRunner(_executable);
-    const auto testNames = GoogleTestRunner::loadTestNames(_executable);
+    auto runner = GoogleTestRunner(getExecutable());
+    const auto testNames = GoogleTestRunner::loadTestNames(getExecutable());
     const auto provider = [&testNames](const std::string& name)
     {
         if(name.empty())
@@ -92,7 +58,7 @@ void GoogleTestSuite::update()
         if(!parent->getParent())
         {
             auto suite = std::dynamic_pointer_cast<GoogleTestSuite>(parent);
-            auto group = std::make_shared<GoogleTestGroup>(_executable, name);
+            auto group = std::make_shared<GoogleTestGroup>(getExecutable(), name);
             
             suite->add(group);
             group->setParent(suite);
@@ -103,9 +69,9 @@ void GoogleTestSuite::update()
         }
         
         auto group = std::dynamic_pointer_cast<GoogleTestGroup>(parent);
-        auto test = std::make_shared<GoogleTest>(_executable, name);
+        auto test = std::make_shared<GoogleTest>(getExecutable(), name);
             
-        group->addTest(test);
+        group->add(test);
         test->setParent(group);
 
         runner.create(test);
@@ -116,27 +82,12 @@ void GoogleTestSuite::update()
     updateChildren(provider, create);
 }
 
-void GoogleTestSuite::add(const TestPtr& test)
-{
-    _tests.emplace_back(test);
-}
-
-TestPtr GoogleTestSuite::getParent() const
-{
-    return {};
-}
-
-std::list<TestPtr> GoogleTestSuite::getChildren() const
-{
-    return std::list<TestPtr>(_tests.begin(), _tests.end());
-}
-
 void GoogleTestSuite::updateChildren(const TestNameProvider& nameProvider, const TestCreator& create)
 {
     auto tests = std::vector<TestPtr>();
     const auto testNames = nameProvider(getName());
     
-    for(auto testcase : _tests)
+    for(auto testcase : getChildren())
     {
         const auto it = testNames.find(testcase->getName());
         
@@ -155,16 +106,6 @@ void GoogleTestSuite::updateChildren(const TestNameProvider& nameProvider, const
     for(auto& test : tests)
         test->updateChildren(nameProvider, create);
     
-    _tests.swap(tests);
-}
-
-void GoogleTestSuite::setItem(QStandardItem* item)
-{
-    _item = item;
-}
-
-QStandardItem * GoogleTestSuite::getItem() const
-{
-    return _item;
+    swap(tests);
 }
 

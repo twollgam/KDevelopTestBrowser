@@ -8,9 +8,10 @@
 #include "utilities.h"
 #include "TestDataJob.h"
 #include "Roles.h"
+#include "IconManager.h"
 
 GoogleTestGroup::GoogleTestGroup(const std::string& executable, const std::string& name)
-: GoogleTest(executable, name), _executable(executable)
+: GoogleTest(executable, name)
 {
 }
  
@@ -63,6 +64,32 @@ namespace
     
 }
 
+TestState GoogleTestGroup::getState() const
+{
+    auto state = TestState();
+    
+    state.state = TestState::State::Stopped;
+    state.result = TestState::Result::NotRun;
+    
+    if(testsAreRunning(_tests))
+        state.state = TestState::State::Executing;
+    else if(countFailed(_tests))
+        state.result = TestState::Result::Error;
+    else if(countSuccess(_tests))
+        state.result = TestState::Result::Passed;
+    
+    const auto counter = [](unsigned sum, TestPtr test)
+    {
+        if(test->getState().state == TestState::State::Stopped)
+            return sum + test->getState().durationInMilliseconds;
+        return sum;
+    };
+    
+    state.durationInMilliseconds =  std::accumulate(_tests.begin(), _tests.end(), 0UL, counter);
+
+    return state;
+}
+
 std::string GoogleTestGroup::getHtmlDetailMessage() const
 {   
     const auto header = "Details of group: <b>" + getName() + "</b><br><br>";
@@ -86,22 +113,22 @@ std::string GoogleTestGroup::getHtmlDetailMessage() const
         std::to_string(failed) + " tests failed" ;
 }
 
-void GoogleTestGroup::start() 
-{
-    GoogleTest::start();
-}
-
 void GoogleTestGroup::execute() 
-{   
-    const auto duration = std::accumulate(_tests.begin(), _tests.end(), 0UL, [](unsigned sum, TestPtr test){ return sum + test->getState().durationInMilliseconds; });
+{
+    const auto state = getState();
+    
+    setIcon(IconManager().getIcon(state));
+
+    const auto duration = state.durationInMilliseconds;
     const auto text = (duration == 0 ? std::string{"< 1"} : std::to_string(duration)) + " ms";
             
     setTime(text);
     
-    getParent()->execute();
+    if(getParent())
+        getParent()->execute();
 }
 
-void GoogleTestGroup::addTest(const TestPtr& test)
+void GoogleTestGroup::add(const TestPtr& test)
 {
     _tests.emplace_back(test);
 }
@@ -113,5 +140,10 @@ std::list<TestPtr> GoogleTestGroup::getChildren() const
 
 void GoogleTestGroup::updateChildren(const TestNameProvider&, const TestCreator&)
 {
+}
+
+void GoogleTestGroup::swap(std::vector<TestPtr>& tests)
+{
+    _tests.swap(tests);
 }
 
