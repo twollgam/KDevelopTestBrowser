@@ -1,25 +1,27 @@
 #pragma once
 
 #include "ITestRunner.h"
+#include "ITest.h"
 
 #include <string>
 #include <map>
 #include <vector>
 
-#include <interfaces/itestsuite.h>
-
 class GoogleTestRunner : public ITestRunner
 {
 public:
-    GoogleTestRunner(const std::string& path, const KDevelop::ITestSuite&);
+    GoogleTestRunner(const std::string& path);
     
     bool isValid() const override;
     
     void load(QStandardItem& item) override;
     
+    void create(TestPtr);
+    
+    static std::map<std::string, std::set<std::string>> loadTestNames(const std::string& path);
+    
 private:
-    const KDevelop::ITestSuite& _suite;
     const std::string _path;
-    std::map<std::string, std::vector<std::string>> _tests;
+    std::map<std::string, std::set<std::string>> _tests;
 };
 

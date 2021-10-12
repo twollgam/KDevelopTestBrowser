@@ -1,4 +1,4 @@
-#include "GoogleTestData.h"
+#include "GoogleTest.h"
 
 #include <QProcess>
 
@@ -8,33 +8,17 @@
 #include "TestDataJob.h"
 #include "Roles.h"
 
-GoogleTestData::GoogleTestData(const std::string& executable, const std::string& testcase, const std::string& testname)
-: _executable(executable), _testcase(testcase), _testname(testname)
+GoogleTest::GoogleTest(const std::string& executable, const std::string& name)
+: _executable(executable), _name(name)
 {
 }
- 
-std::string GoogleTestData::getProjectName() const 
+
+std::string GoogleTest::getName() const
 {
-    return {};
+    return _name;
 }
 
-std::string GoogleTestData::getTestHostName() const
-{
-    return _executable;
-}
-
-
-std::string GoogleTestData::getTestCaseName() const
-{
-    return _testcase;
-}
-
-std::string GoogleTestData::getTestName() const
-{
-    return _testname;
-}
-
-TestState GoogleTestData::getState() const
+TestState GoogleTest::getState() const
 {
     return _state;
 }
@@ -86,16 +70,9 @@ namespace
 
 }
 
-std::string GoogleTestData::getHtmlDetailMessage() const
+std::string GoogleTest::getHtmlDetailMessage() const
 {
-    if(_testname.empty())
-    {
-        const auto header = "Details of group: <b>" + getTestCaseName() + "</b><br><br>";
-        
-        return header;
-    }
-
-    const auto header = "Details of test: <b>" + getTestCaseName() + "." + getTestName() + "</b><br><br>";
+    const auto header = "Details of test: <b>" + getParent()->getName() + "." + getName() + "</b><br><br>";
 
     if(_state.state != TestState::State::Stopped)
         return header + "Running";
@@ -126,11 +103,11 @@ namespace
         trace("result from " + id);
         while(std::getline(stream, line))
         {
-            trace(line);
+            //trace(line);
         
             if(line.find("PASSED") != std::string::npos && line.find("0 tests.") != std::string::npos)
             {
-                trace("detected skipped");
+                //trace("detected skipped");
 
                 auto state = TestState();
                 
@@ -144,7 +121,7 @@ namespace
             
             if(position == std::string::npos)
             {
-                trace("id not found");
+                //trace("id not found");
                 
                 if(runDetected)
                     message += line + '\n';
@@ -154,26 +131,26 @@ namespace
             
             if(line[position - 1] != ' ')
             {
-                trace("no exact match");
+                //trace("no exact match");
                 continue;
             }
             
             if(position + id.length() < line.length() && line[position + id.length()] != ' ')
             {
-                trace("no exact match: " + std::to_string(position + id.length()) + " < " + std::to_string(line.length()));
+                //trace("no exact match: " + std::to_string(position + id.length()) + " < " + std::to_string(line.length()));
                 continue;
             }
             
             if(line.find(" RUN ") != std::string::npos)
             {
-                trace("detected run");
+                //trace("detected run");
                 runDetected = true;
                 continue;
             }
             
             if(line.find(" FAILED ") != std::string::npos)
             {
-                trace("detected error");
+                //trace("detected error");
                 const auto duration = line.substr(position + id.length() + 2);
 
                 auto state = TestState();
@@ -183,14 +160,14 @@ namespace
                 state.durationInMilliseconds = std::stoi(duration);
                 state.message = message;
                 
-                trace("duration: " + std::to_string(state.durationInMilliseconds));
-                trace("message: " + message);
+                //trace("duration: " + std::to_string(state.durationInMilliseconds));
+                //trace("message: " + message);
 
                 return state;
             }
             if(line.find(" OK ") != std::string::npos)
             {
-                trace("detected success");
+                //trace("detected success");
                 const auto duration = line.substr(position + id.length() + 2);
 
                 auto state = TestState();
@@ -199,7 +176,7 @@ namespace
                 state.state = TestState::State::Stopped;
                 state.durationInMilliseconds = std::stoi(duration);
                 
-                trace("duration: " + std::to_string(state.durationInMilliseconds));
+                //trace("duration: " + std::to_string(state.durationInMilliseconds));
                 
                 return state;
             }
@@ -209,15 +186,15 @@ namespace
     }
 }
 
-void GoogleTestData::start() 
+void GoogleTest::start() 
 {
     _state.state = TestState::State::Started;
     _state.result = TestState::Result::NotRun;
 }
 
-void GoogleTestData::execute() 
+void GoogleTest::execute() 
 {
-    const auto id = _testcase + "." + (_testname.empty() ? std::string{"*"} :  _testname);
+    const auto id = getParent()->getName() + "." + getName();
 
     trace("execute: " + id);
 
@@ -241,25 +218,50 @@ void GoogleTestData::execute()
     auto&& output = std::stringstream(process.readAll().toStdString());
     
     _state = ::getState(id, output);
-}
-
-namespace
-{
-    QList<QStandardItem*> createItemList(QStandardItem* item)
-    {
-        const auto parent = item->parent();
-
-        return QList<QStandardItem*>() << item << parent->child(item->row(), 1) << parent->child(item->row(), 2);
-    }
-}
-
-std::list<KJob *> GoogleTestData::createJobs(QStandardItem* item)
-{
-    auto jobs = std::list<KJob*>();
     
-    jobs.push_back(new TestDataJob(*this, createItemList(item)));
+    auto time = std::string{"na"};
     
-    return jobs;
+    if(_state.result == TestState::Result::Error || _state.result == TestState::Result::Passed)
+        time = (_state.durationInMilliseconds == 0 ? std::string{"< 1"} : std::to_string(_state.durationInMilliseconds)) + " ms";
+    
+    setTime(time);
+    
+    getParent()->execute();
 }
 
+void GoogleTest::setParent(TestPtr parent)
+{
+    _parent = parent;
+}
 
+TestPtr GoogleTest::getParent() const
+{
+    return _parent;
+}
+
+std::list<TestPtr> GoogleTest::getChildren() const
+{
+    return {};
+}
+
+void GoogleTest::updateChildren(const TestNameProvider&, const TestCreator&)
+{
+}
+
+QStandardItem* GoogleTest::getItem() const 
+{
+    return _item;
+}
+
+void GoogleTest::setItem(QStandardItem* item)
+{
+    _item = item;
+}
+
+void GoogleTest::setTime(const std::string& text)
+{
+    auto item = getItem()->parent()->child(getItem()->row(), 1);
+    
+    if(item)
+        item->setText(text.c_str());
+}

@@ -2,9 +2,12 @@
 
 #include <QAction>
 #include <interfaces/itestcontroller.h>
+#include <project/projectmodel.h>
 #include "ITestRunner.h"
 #include "TreeView.h"
 #include <QTextBrowser>
+
+#include <regex>
 
 class TestBrowser;
 
@@ -33,7 +36,6 @@ public Q_SLOTS:
     void notifyTestCaseStarted(KDevelop::ITestSuite* suite, const QStringList& test_cases);
     QStandardItem* addProject(KDevelop::IProject* project);
     void removeProject(KDevelop::IProject* project);
-    void doubleClicked(const QModelIndex&);
     void onItemClicked(const QModelIndex&);
 
     QList<QAction*> contextMenuActions();
@@ -41,9 +43,14 @@ public Q_SLOTS:
 private:
     void runSelectedTests();
     void debugSelectedTests();
+    void reload();
     void changeFilter(const QString &newFilter);
     void anchorClicked(const QUrl& link);
     void showSource(const std::string& file, int line);
+    void showSource(const std::string& lineToSearch);
+    void showSource(const std::regex& lineToSearch, const std::string& path);
+    void showSource(const QModelIndex& index);
+    void built(KDevelop::ProjectBaseItem*);
 
 
     QIcon iconForTestResult(KDevelop::TestResult::TestCaseResult result);

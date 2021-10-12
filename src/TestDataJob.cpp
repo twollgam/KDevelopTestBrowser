@@ -4,8 +4,8 @@
 #include "utilities.h"
 #include "IconManager.h"
 
-TestDataJob::TestDataJob(ITestData& testdata, const QList<QStandardItem*>& items)
-: _testdata(testdata), _items(items)
+TestDataJob::TestDataJob(ITest& test, const QList<QStandardItem*>& items)
+: _test(test), _items(items)
 {
     trace("TestDataJob constructed");
 }
@@ -30,8 +30,8 @@ void TestDataJob::startTest()
 {
     trace("start test");
     
-    _testdata.start();
-    setIcon(*_items[0], _testdata.getState());
+    _test.start();
+    setIcon(*_items[0], _test.getState());
 
     QTimer::singleShot(1, this, &TestDataJob::executeTest);
 }
@@ -40,25 +40,9 @@ void TestDataJob::executeTest()
 {
     trace("execute test");
     
-    _testdata.execute();
+    _test.execute();
     
     trace("executed test");
 
-    setIcon(*_items[0], _testdata.getState());
-    
-    if(_testdata.getState().result != TestState::Result::NotRun && _items.size() > 1)
-    {
-        if(_testdata.getState().durationInMilliseconds == 0)
-            _items[1]->setText("< 1 ms");
-        else
-        {
-            const auto display = std::to_string(_testdata.getState().durationInMilliseconds) + " ms";
-                
-            _items[1]->setText(display.c_str());
-        }
-    }
-    //if(_testdata.getState().result != TestState::Result::NotRun && _items.size() > 2)
-    //{
-    //    _items[2]->setText(_testdata.getState().message.c_str());
-    //}
+    setIcon(*_items[0], _test.getState());
 }

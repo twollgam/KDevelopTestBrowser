@@ -13,10 +13,15 @@
 #include <interfaces/itestcontroller.h>
 #include <interfaces/itestsuite.h>
 #include <interfaces/iruncontroller.h>
+#include <interfaces/ilauncher.h>
+#include <interfaces/ilaunchconfiguration.h>
+#include <interfaces/launchconfigurationtype.h>
 #include <interfaces/idebugcontroller.h>
 #include <debugger/interfaces/idebugsession.h>
 #include <interfaces/idocumentcontroller.h>
 #include <interfaces/isession.h>
+#include <project/interfaces/ibuildsystemmanager.h>
+#include <project/interfaces/iprojectbuilder.h>
 
 #include <util/executecompositejob.h>
 
@@ -28,6 +33,7 @@
 #include <KActionCollection>
 #include <KJob>
 #include <KLocalizedString>
+#include <KConfigGroup>
 #if QT_VERSION < QT_VERSION_CHECK(5, 10, 0)
 #include <KRecursiveFilterProxyModel>
 #endif
@@ -42,17 +48,17 @@
 #include <QWidgetAction>
 #if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
 #include <QSortFilterProxyModel>
-#include "ITestData.h"
+#include "ITest.h"
 #endif
 
 #include "TestDataJob.h"
 #include "InfoTextDelegate.h"
+#include "ITestSuite.h"
 
-#include <string>
+#include <algorithm>
+#include <regex>
 
-using namespace KDevelop;
-//using namespace std::literals::string_literals;
-
+using KDevelop::ICore;
 
 TestView::TestView(TestBrowser* plugin, QWidget* parent)
 : QWidget(parent), m_plugin(plugin), m_tree(new TreeView(this)), _textBrowser(new QTextBrowser(this))
@@ -84,7 +90,7 @@ TestView::TestView(TestBrowser* plugin, QWidget* parent)
     m_tree->setSelectionMode(QTreeView::ExtendedSelection);
     m_tree->setExpandsOnDoubleClick(false);
     m_tree->sortByColumn(0, Qt::AscendingOrder);
-    connect(m_tree, &QTreeView::doubleClicked, this, &TestView::doubleClicked);
+
     connect(m_tree, &QAbstractItemView::clicked, this, &TestView::onItemClicked);
 
     m_model = new QStandardItemModel(this);
@@ -101,13 +107,22 @@ TestView::TestView(TestBrowser* plugin, QWidget* parent)
     m_tree->header()->setSectionResizeMode(QHeaderView::ResizeMode::ResizeToContents);
     m_tree->setItemDelegateForColumn(2, new InfoTextDelegate(m_tree));
     
-    auto showSource = new QAction( QIcon::fromTheme(QStringLiteral("code-context")), i18nc("@action:inmenu", "Show Source"), this );
-    //connect (showSource, &QAction::triggered, this, &TestView::showSource);
-    m_contextMenuActions << showSource;
+    auto showSourceAction = new QAction( QIcon::fromTheme(QStringLiteral("code-context")), i18nc("@action:inmenu", "Show Source"), this );
+    connect (showSourceAction, &QAction::triggered, this, [&](){ showSource(); });
+    m_contextMenuActions << showSourceAction;
 
     auto runTest = new QAction(i18nc("@action:inmenu", "Run Test"), this );
     connect (runTest, &QAction::triggered, this, &TestView::runSelectedTests);
     m_contextMenuActions << runTest;
+    
+    auto debugTest = new QAction( QIcon::fromTheme(QStringLiteral("system-debug")), i18nc("@action:inmenu", "Debug Test"), this );
+    connect(debugTest, &QAction::triggered, this, &TestView::debugSelectedTests);
+    m_contextMenuActions << debugTest;
+
+    auto reloadTest = new QAction( QIcon::fromTheme(QStringLiteral("system-reload")), i18nc("@action:inmenu", "Reload"), this );
+    connect(reloadTest, &QAction::triggered, this, &TestView::reload);
+    m_contextMenuActions << reloadTest;
+
 
     addAction(plugin->actionCollection()->action(QStringLiteral("run_all_tests")));
     addAction(plugin->actionCollection()->action(QStringLiteral("stop_running_tests")));
@@ -115,10 +130,6 @@ TestView::TestView(TestBrowser* plugin, QWidget* parent)
     auto runSelected = new QAction( QIcon::fromTheme(QStringLiteral("system-run")), i18nc("@action", "Run Selected Tests"), this );
     connect (runSelected, &QAction::triggered, this, &TestView::runSelectedTests);
     addAction(runSelected);
-
-    auto debugSelected = new QAction( QIcon::fromTheme(QStringLiteral("system-run")), i18nc("@action", "Debug Selected Tests"), this );
-    connect (debugSelected, &QAction::triggered, this, &TestView::debugSelectedTests);
-    addAction(debugSelected);
 
     auto edit = new QLineEdit(parent);
     edit->setPlaceholderText(i18nc("@info:placeholder", "Filter..."));
@@ -131,30 +142,21 @@ TestView::TestView(TestBrowser* plugin, QWidget* parent)
     setFocusProxy(edit);
 
     auto pc = ICore::self()->projectController();
-    connect (pc, &IProjectController::projectClosed, this, &TestView::removeProject);
+    connect (pc, &KDevelop::IProjectController::projectClosed, this, &TestView::removeProject);
 
     auto tc = ICore::self()->testController();
-    connect(tc, &ITestController::testSuiteAdded, this, &TestView::addTestSuite);
-    connect(tc, &ITestController::testSuiteRemoved, this, &TestView::removeTestSuite);
-    connect(tc, &ITestController::testRunFinished, this, &TestView::updateTestSuite);
-    connect(tc, &ITestController::testRunStarted, this, &TestView::notifyTestCaseStarted);
-    
+    connect(tc, &KDevelop::ITestController::testSuiteAdded, this, &TestView::addTestSuite);
+    connect(tc, &KDevelop::ITestController::testSuiteRemoved, this, &TestView::removeTestSuite);
+    connect(tc, &KDevelop::ITestController::testRunFinished, this, &TestView::updateTestSuite);
+    connect(tc, &KDevelop::ITestController::testRunStarted, this, &TestView::notifyTestCaseStarted);
+
     const auto suites = tc->testSuites();
-    for (auto suite : suites) {
+    for (auto suite : suites)
         addTestSuite(suite);
-    }
 }
 
 TestView::~TestView()
 {
-}
-
-void TestView::doubleClicked(const QModelIndex& index)
-{
-    trace("doubleClicked: " + std::to_string(index.column()) + ":" + std::to_string(index.row()));
-
-    m_tree->selectionModel()->select(index, QItemSelectionModel::ClearAndSelect);
-    runSelectedTests();
 }
 
 void TestView::onItemClicked(const QModelIndex& index)
@@ -170,7 +172,7 @@ void TestView::onItemClicked(const QModelIndex& index)
     }
     
     trace("has data");
-    auto testdata = data.value<TestDataPtr>();
+    auto testdata = data.value<TestPtr>();
     
     if(testdata)
     {
@@ -199,16 +201,100 @@ void TestView::showSource(const std::string& file, int line)
     documentController->openDocument(QUrl(("file://" + file).c_str()), KTextEditor::Cursor(line, 0));
 }
 
+void TestView::showSource(const std::string& lineToSearch)
+{
+    auto documentController = ICore::self()->documentController();
+
+    for(auto document : documentController->openDocuments())
+    {
+        const auto text = document->textDocument()->text().toStdString();
+        const auto position = text.find(lineToSearch);
+        
+        if(position != std::string::npos)
+        {
+            document->activeTextView();
+            return;
+        }
+    }
+}
+
+void TestView::showSource(const std::regex& lineToSearch, const std::string& path)
+{
+    trace("TestView::showSource(const std::regex& lineToSearch)");
+
+    auto documentController = ICore::self()->documentController();
+
+    for(auto document : documentController->openDocuments())
+    {
+        if(!document->textDocument())
+            continue;
+        
+        const auto file = document->url().path().toStdString();
+        
+        for(auto n = 0; n < document->textDocument()->lines(); ++n)
+        {
+            const auto line = document->textDocument()->line(n).toStdString();
+        
+            //trace("check: " + text);
+            
+            if(std::regex_search(line, lineToSearch))
+            {
+                trace("match " + file);
+                
+                showSource(file, n);
+                return;
+            }
+        }
+    }
+}
+
+void TestView::showSource(const QModelIndex& index)
+{
+    trace("TestView::showSource(const QModelIndex& index)");
+    
+    const auto data = index.model()->data(index, TestDataRole); 
+    
+    if(!data.isValid())
+    {
+        trace("has no data");
+        return;
+    }
+    
+    trace("has data");
+    auto test = data.value<TestPtr>();
+    
+    if(test)
+    {
+        trace("has Test");
+        trace("open document");
+
+        if(!test->getParent())
+            return;
+     
+        const auto path = "";
+        
+        if(!test->getParent()->getParent())
+            showSource(std::regex("\\( *" + test->getName() + " *,.*\\)"), path);
+        else            
+            showSource(std::regex("\\( *" + test->getParent()->getName() + " *, *" + test->getName() + " *\\)"), path);
+    }
+}
+
 void TestView::showSource()
 {
+    trace("TestView::showSource()");
+
     auto indexes = m_tree->selectionModel()->selectedIndexes();
     if (indexes.isEmpty())
         return;
 
-    IndexedDeclaration declaration;
+    KDevelop::IndexedDeclaration declaration;
     auto tc = ICore::self()->testController();
 
     QModelIndex index = m_filter->mapToSource(indexes.first());
+    
+    showSource(index);
+    
     QStandardItem* item = m_model->itemFromIndex(index);
     if (item->parent() == nullptr)
     {
@@ -217,19 +303,19 @@ void TestView::showSource()
     }
     else if (item->parent()->parent() == nullptr)
     {
-        IProject* project = ICore::self()->projectController()->findProjectByName(item->parent()->data(ProjectRole).toString());
-        ITestSuite* suite =  tc->findTestSuite(project, item->data(SuiteRole).toString());
+        auto project = ICore::self()->projectController()->findProjectByName(item->parent()->data(ProjectRole).toString());
+        auto suite =  tc->findTestSuite(project, item->data(SuiteRole).toString());
         declaration = suite->declaration();
     }
     else
     {
-        IProject* project = ICore::self()->projectController()->findProjectByName(item->parent()->parent()->data(ProjectRole).toString());
-        ITestSuite* suite =  tc->findTestSuite(project, item->parent()->data(SuiteRole).toString());
+        auto project = ICore::self()->projectController()->findProjectByName(item->parent()->parent()->data(ProjectRole).toString());
+        auto suite =  tc->findTestSuite(project, item->parent()->data(SuiteRole).toString());
         if(suite)
             declaration = suite->caseDeclaration(item->data(CaseRole).toString());
     }
 
-    DUChainReadLocker locker;
+    KDevelop::DUChainReadLocker locker;
     auto d = declaration.data();
     if (!d)
         return;
@@ -243,7 +329,7 @@ void TestView::showSource()
     dc->openDocument(url, cursor);
 }
 
-void TestView::updateTestSuite(ITestSuite* suite, const TestResult& result)
+void TestView::updateTestSuite(KDevelop::ITestSuite* suite, const KDevelop::TestResult& result)
 {
     auto item = itemForSuite(suite);
     if (!item)
@@ -274,7 +360,7 @@ void TestView::changeFilter(const QString &newFilter)
     }
 }
 
-void TestView::notifyTestCaseStarted(ITestSuite* suite, const QStringList& test_cases)
+void TestView::notifyTestCaseStarted(KDevelop::ITestSuite* suite, const QStringList& test_cases)
 {
     auto item = itemForSuite(suite);
     if (!item)
@@ -297,12 +383,12 @@ void TestView::notifyTestCaseStarted(ITestSuite* suite, const QStringList& test_
     }
 }
 
-QIcon TestView::iconForTestResult(TestResult::TestCaseResult result)
+QIcon TestView::iconForTestResult(KDevelop::TestResult::TestCaseResult result)
 {
     return IconManager().getIcon(result);
 }
 
-QStandardItem* TestView::itemForSuite(ITestSuite* suite)
+QStandardItem* TestView::itemForSuite(KDevelop::ITestSuite* suite)
 {
     const auto items = m_model->findItems(suite->name(), Qt::MatchRecursive);
     auto it = std::find_if(items.begin(), items.end(), [&](QStandardItem* item) {
@@ -312,7 +398,7 @@ QStandardItem* TestView::itemForSuite(ITestSuite* suite)
     return (it != items.end()) ? *it : nullptr;
 }
 
-QStandardItem* TestView::itemForProject(IProject* project)
+QStandardItem* TestView::itemForProject(KDevelop::IProject* project)
 {
     auto itemsForProject = m_model->findItems(project->name());
     
@@ -323,9 +409,179 @@ QStandardItem* TestView::itemForProject(IProject* project)
     return addProject(project);
 }
 
+void TestView::reload()
+{
+    trace("reload");
+    
+    auto indexes = m_tree->selectionModel()->selectedIndexes();
+    if (indexes.isEmpty())
+    {
+        //if there's no selection we'll run all of them (or only the filtered)
+        //in case there's a filter.
+        const int rc = m_filter->rowCount();
+        indexes.reserve(rc);
+        for(int i=0; i<rc; ++i) {
+            indexes << m_filter->index(i, 0);
+        }
+    }
+
+    for (const auto& idx : indexes) 
+    {
+        auto index = m_filter->mapToSource(idx);
+        if (index.parent().isValid() && indexes.contains(index.parent()))
+            continue;
+
+        auto item = m_model->itemFromIndex(index);
+        if(item->data(TestDataRole).isValid())
+        {
+            auto testdata = item->data(TestDataRole).value<TestPtr>();
+            
+            if(testdata)
+            {
+                auto suite = std::dynamic_pointer_cast<ITestSuite>(testdata);
+                
+                if(suite)
+                    suite->update();
+            }
+        }
+    }
+}
+
 void TestView::debugSelectedTests()
 {
+    trace("debug");
+    
+    const auto name = QString("DebugTest");
+    const auto& configurations = ICore::self()->runController()->launchConfigurations();
+    
+    for(const auto& configuration : configurations)
+    {
+        trace("lc: " + configuration->name().toStdString());
+        if(configuration->name() == name)
+        {
+            const auto config = configuration->config();
+            
+            for(const auto& item : config.keyList().toStdList())
+                trace("key: " + item.toStdString());
 
+            for(const auto& item : config.groupList().toStdList())
+                trace("group: " + item.toStdString());
+
+            for(const auto& item : config.entryMap().toStdMap())
+                trace("item: " + item.first.toStdString() + "=" + item.second.toStdString());
+            
+            const auto cconfig = configuration->config().config();
+            
+            for(const auto& item : cconfig->entryMap().toStdMap())
+                trace("citem: " + item.first.toStdString() + "=" + item.second.toStdString());
+
+            for(const auto& item : cconfig->groupList().toStdList())
+            {
+                trace("cgroup: " + item.toStdString());
+                for(const auto& item : cconfig->entryMap(item).toStdMap())
+                    trace("citem: " + item.first.toStdString() + "=" + item.second.toStdString());
+            }
+            
+            return;
+        }
+    }
+    
+    const auto& configurationTypes = ICore::self()->runController()->launchConfigurationTypes();
+
+    KDevelop::LaunchConfigurationType* type = nullptr;
+    
+    for(const auto& item : configurationTypes)
+    {
+        trace("lct: " + item->name().toStdString());
+        
+        if(item->name() == "Compiled Binary")
+        {
+            type = item;
+            
+            break;
+        }
+    }
+    
+    if(!type)
+        return;
+    
+    KDevelop::ILauncher* launcher = nullptr;
+    
+    for(const auto& item : type->launchers())
+    {
+        trace("l: " + item->name().toStdString());
+        
+        if(item->name() == "GDB")
+        {
+            launcher = item;
+            break;
+        }
+    }
+    
+    if(!launcher)
+        return;
+    
+    auto launcherPair = QPair<QString, QString>();
+    
+    launcherPair.first = "debug";
+    launcherPair.second = launcher->id();
+    
+    //KDevelop::IProject* project = nullptr;
+    auto project = ICore::self()->projectController()->findProjectByName("TestBrowser");
+
+    if(!project)
+        trace("no project found");
+
+    
+    auto config = ICore::self()->runController()->createLaunchConfiguration(type, launcherPair, project, name);
+    
+    for(const auto& group : config->config().groupList())
+        trace("group: " + group.toStdString());
+    
+    trace("execute");
+    
+    auto job = ICore::self()->runController()->execute(QStringLiteral("debug"), config);
+    
+    if(!job)
+        trace("no job created");
+    else
+        ICore::self()->runController()->registerJob(job);
+}
+
+namespace
+{
+    std::set<TestPtr> collectTests(TestPtr test)
+    {
+        auto tests = std::set<TestPtr>();
+        
+        if(test->getChildren().empty())
+            tests.emplace(test);
+        else
+        {
+            for(auto& child : test->getChildren())
+            {
+                const auto children = collectTests(child);
+                
+                std::copy(children.begin(), children.end(), std::inserter(tests, tests.begin()));
+            }
+        }
+        
+        return tests;
+    }
+    
+    QList<QStandardItem*> createItemList(QStandardItem* item)
+    {
+        const auto parent = item->parent();
+
+        return QList<QStandardItem*>() << item << parent->child(item->row(), 1) << parent->child(item->row(), 2);
+    }
+
+    KJob* createJob(TestPtr test)
+    {
+        trace("create job for " + test->getName());
+        
+        return new TestDataJob(*test, createItemList(test->getItem()));
+    }
 }
 
 void TestView::runSelectedTests()
@@ -362,33 +618,34 @@ void TestView::runSelectedTests()
         auto item = m_model->itemFromIndex(index);
         if(item->data(TestDataRole).isValid())
         {
-            trace("has TestData");
-            auto testdata = item->data(TestDataRole).value<TestDataPtr>();
-            trace("has TestData");
+            trace("has Test");
+            auto test = item->data(TestDataRole).value<TestPtr>();
             
-            if(testdata)
+            if(test)
             {
                 trace("create jobs");
                 
-                for(const auto& job : testdata->createJobs(item))
-                    jobs << job;
+                const auto tests = collectTests(test);
+                
+                for(const auto& test : tests)
+                    jobs << createJob(test);
             }
         }
         else if (item->parent() == nullptr)
         {
             // A project was selected
-            IProject* project = ICore::self()->projectController()->findProjectByName(item->data(ProjectRole).toString());
+            auto project = ICore::self()->projectController()->findProjectByName(item->data(ProjectRole).toString());
             const auto suites = tc->testSuitesForProject(project);
-            for (ITestSuite* suite : suites) {
-                jobs << suite->launchAllCases(ITestSuite::Silent);
+            for (auto suite : suites) {
+                jobs << suite->launchAllCases(KDevelop::ITestSuite::Silent);
             }
         }
         else if (item->parent()->parent() == nullptr)
         {
             // A suite was selected
-            IProject* project = ICore::self()->projectController()->findProjectByName(item->parent()->data(ProjectRole).toString());
-            ITestSuite* suite =  tc->findTestSuite(project, item->data(SuiteRole).toString());
-            jobs << suite->launchAllCases(ITestSuite::Verbose);
+            auto project = ICore::self()->projectController()->findProjectByName(item->parent()->data(ProjectRole).toString());
+            auto suite =  tc->findTestSuite(project, item->data(SuiteRole).toString());
+            jobs << suite->launchAllCases(KDevelop::ITestSuite::Verbose);
         }
         else
         {
@@ -398,7 +655,7 @@ void TestView::runSelectedTests()
             const auto testCase = item->data(CaseRole).toString();
             
             if(suite)
-                jobs << suite->launchCase(testCase, ITestSuite::Verbose);
+                jobs << suite->launchCase(testCase, KDevelop::ITestSuite::Verbose);
         }
     }
 
@@ -407,14 +664,43 @@ void TestView::runSelectedTests()
         //auto* compositeJob = new KDevelop::ExecuteCompositeJob(this, jobs);
         //compositeJob->setObjectName(i18np("Run 1 test", "Run %1 tests", jobs.size()));
         //compositeJob->setProperty("test_job", true);
+        //ICore::self()->runController()->registerJob(compositeJob);
         for(auto& job : jobs) 
             ICore::self()->runController()->registerJob(job);
     }
 }
 
-void TestView::addTestSuite(ITestSuite* suite)
+void TestView::built(KDevelop::ProjectBaseItem *dom)
+{
+    trace("built: " + dom->project()->name().toStdString());
+    
+    auto item = itemForProject(dom->project());
+    
+    if(!item)
+        return;
+    
+    if(item->data(TestDataRole).isValid())
+    {
+        trace("has TestData");
+        auto testdata = item->data(TestDataRole).value<TestPtr>();
+        
+        if(testdata)
+        {
+            auto suite = std::dynamic_pointer_cast<ITestSuite>(testdata);
+            
+            if(suite)
+                suite->update();
+        }
+    }    
+}
+
+void TestView::addTestSuite(KDevelop::ITestSuite* suite)
 {
     trace("enter addTestSuite: " + suite->name().toStdString());
+    
+    auto builder = suite->project()->buildSystemManager()->builder();
+    
+    //connect(builder, &KDevelop::IProjectBuilder::built, this, &TestView::built);
     
     auto projectItem = itemForProject(suite->project());
     Q_ASSERT(projectItem);
@@ -442,22 +728,22 @@ void TestView::addTestSuite(ITestSuite* suite)
         for (const auto& testcaseName : suite->cases()) {
             trace("has testcase " + testcaseName.toStdString());
             
-            auto caseItem = new QStandardItem(iconForTestResult(TestResult::NotRun), testcaseName);
+            auto caseItem = new QStandardItem(iconForTestResult(KDevelop::TestResult::NotRun), testcaseName);
             caseItem->setData(testcaseName, CaseRole);
             suiteItem->appendRow(caseItem);
         }
     }
     
-    projectItem->appendRow(suiteItem);
+    projectItem->appendRow(QList<QStandardItem*>() << suiteItem << new QStandardItem("na"));
 }
 
-void TestView::removeTestSuite(ITestSuite* suite)
+void TestView::removeTestSuite(KDevelop::ITestSuite* suite)
 {
     QStandardItem* item = itemForSuite(suite);
     item->parent()->removeRow(item->row());
 }
 
-QStandardItem* TestView::addProject(IProject* project)
+QStandardItem* TestView::addProject(KDevelop::IProject* project)
 {
     trace("enter addProject: " + project->name().toStdString());
 
@@ -469,7 +755,7 @@ QStandardItem* TestView::addProject(IProject* project)
     return projectItem;
 }
 
-void TestView::removeProject(IProject* project)
+void TestView::removeProject(KDevelop::IProject* project)
 {
     QStandardItem* projectItem = itemForProject(project);
     m_model->removeRow(projectItem->row());

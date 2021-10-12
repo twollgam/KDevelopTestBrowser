@@ -63,7 +63,7 @@ TestRunnerPtr TestFactory::create(const KDevelop::ITestSuite& suite)
     
     // this is a hack until one can get the infos from system
     const auto path = buildFolder + "/" + suite.name().toStdString();    
-    auto runner = std::make_shared<GoogleTestRunner>(path, suite);
+    auto runner = std::make_shared<GoogleTestRunner>(path);
     
     if(runner->isValid())
         return runner;

@@ -7,13 +7,14 @@
 #include <sstream>
 
 #include "utilities.h"
-#include "GoogleTestData.h"
+#include "GoogleTest.h"
 #include "IconManager.h"
 #include "Roles.h"
 #include "GoogleTestGroup.h"
+#include "GoogleTestSuite.h"
 
-GoogleTestRunner::GoogleTestRunner(const std::string& path, const KDevelop::ITestSuite& suite)
-: _suite(suite), _path(path)
+GoogleTestRunner::GoogleTestRunner(const std::string& path)
+: _path(path)
 {
     trace("create GoogleTestRunner: " + path);
 }
@@ -41,22 +42,104 @@ bool GoogleTestRunner::isValid() const
     return false;
 }
 
+void GoogleTestRunner::create(TestPtr test)
+{
+    trace("GoogleTestRunner::create(" + test->getName() + ")");
+    
+    auto manager = IconManager();
+
+    if(!test->getParent())
+    {
+        trace("suite");
+        
+        test->getItem()->setIcon(manager.getIcon(KDevelop::TestResult::NotRun));
+        
+        return;
+    }
+
+    auto parentItem = test->getParent()->getItem();
+
+    if(!parentItem)
+    {
+        trace("parent item is null");
+        return;
+    }
+
+    auto item = new QStandardItem(manager.getIcon(KDevelop::TestResult::NotRun), test->getName().c_str());
+    auto data = QVariant();
+    
+    data.setValue(test);
+    item->setData(data, TestDataRole);
+    parentItem->appendRow(QList<QStandardItem*>() << item << new QStandardItem("na") << new QStandardItem(""));      
+    test->setItem(item);
+
+    if(!test->getParent()->getParent())
+    {
+        trace("group");
+        
+        item->setData(test->getName().c_str(), SuiteRole);
+        
+        return;
+    }
+
+    trace("test");
+    
+    item->setData(test->getName().c_str(), CaseRole);    
+}
+
 void GoogleTestRunner::load(QStandardItem& item)
 {
     trace("load");
     
+    _tests = loadTestNames(_path);
+    
+    auto suite = std::make_shared<GoogleTestSuite>(_path, item.data(SuiteRole).toString().toStdString());
+    
+    suite->setItem(&item);
+ 
+    auto data = QVariant();
+        
+    data.setValue(TestPtr(suite));
+    item.setData(data, TestDataRole);
+    
+    for(const auto& testGroup : _tests)
+    {
+        const auto& testGroupName = testGroup.first;
+        auto testgroup = std::make_shared<GoogleTestGroup>(_path, testGroupName);
+        
+        suite->add(testgroup);
+        testgroup->setParent(suite);
+        
+        create(testgroup);
+        
+        for(const auto& dottedTestName : testGroup.second)
+        {
+            const auto testname = dottedTestName.substr(1);
+            auto test = std::make_shared<GoogleTest>(_path, testname);
+
+            testgroup->addTest(test);
+            test->setParent(testgroup);
+ 
+            create(test);
+         }
+    }
+}
+
+std::map<std::string, std::set<std::string> > GoogleTestRunner::loadTestNames(const std::string& path)
+{
     auto&& process = QProcess();
     
-    process.start(_path.c_str(), QStringList() << "--gtest_list_tests");
+    process.start(path.c_str(), QStringList() << "--gtest_list_tests");
     
     if (!process.waitForStarted())
-        return;
+        return {};
     if (!process.waitForFinished())
-        return;
+        return {};
     
     auto&& output = std::stringstream(process.readAll().toStdString());
     auto line = std::string{};
     auto testcase = std::string{};
+    auto result = std::map<std::string, std::set<std::string>>();
     
     while(std::getline(output, line))
     {
@@ -66,41 +149,10 @@ void GoogleTestRunner::load(QStandardItem& item)
         {
             auto test = line.substr(1);
             
-            _tests[testcase].emplace_back(test);
+            result[testcase].emplace(test);
         }
     }
     
-    auto manager = IconManager();
-    
-    for(const auto& testcase : _tests)
-    {
-        auto testcaseItem = new QStandardItem(manager.getIcon(KDevelop::TestResult::NotRun), testcase.first.c_str());
-        auto testgroup = std::make_shared<GoogleTestGroup>(_path, testcase.first);
-        {
-            auto data = QVariant();
-            
-            data.setValue(TestDataPtr(testgroup));
-            testcaseItem->setData(data, TestDataRole);
-            testcaseItem->setData(testcase.first.c_str(), SuiteRole);
-            item.appendRow(testcaseItem);
-        }
-        
-        for(const auto& test : testcase.second)
-        {
-            const auto testname = test.substr(1);
-            auto testItem = new QStandardItem(manager.getIcon(KDevelop::TestResult::NotRun), testname.c_str());
-            auto data = QVariant();
-            auto testdata = std::make_shared<GoogleTestData>(_path, testcase.first, testname);
-
-            testgroup->addTest(testdata);
-            
-            data.setValue(TestDataPtr(testdata));
-            testItem->setData(data, TestDataRole);
-            testItem->setData(testname.c_str(), CaseRole);
-            
-            testcaseItem->appendRow(QList<QStandardItem*>() << testItem << new QStandardItem("na") << new QStandardItem(""));
-        }
-    }
+    return result;
 }
-
 

@@ -2,7 +2,7 @@
 
 #include <interfaces/icore.h>
 #include <interfaces/itestcontroller.h>
-#include "ITestData.h"
+#include "ITest.h"
 
 class IconManager
 {

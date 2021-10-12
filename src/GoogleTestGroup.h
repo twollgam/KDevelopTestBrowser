@@ -1,35 +1,28 @@
 #pragma once
 
-#include "ITestData.h"
+#include "GoogleTest.h"
 
 #include <string>
 
-class GoogleTestGroup : public ITestData
+class GoogleTestGroup : public GoogleTest, public std::enable_shared_from_this<GoogleTestGroup>
 {
 public:
-    GoogleTestGroup(const std::string& executable, const std::string& testcase);
+    GoogleTestGroup(const std::string& executable, const std::string& name);
     ~GoogleTestGroup() override = default;
     
-    std::string getProjectName() const override;
-    std::string getTestHostName() const override;
-    std::string getTestCaseName() const override;
-    std::string getTestName() const override;
-    
-    TestState getState() const override;
     std::string getHtmlDetailMessage() const override;
     
     void start() override;
     void execute() override;
     
-    std::list<KJob*> createJobs(QStandardItem*) override;
-
-    void addTest(const TestDataPtr&);
+    void addTest(const TestPtr&);
+    
+    std::list<TestPtr> getChildren() const override;
+    void updateChildren(const TestNameProvider&, const TestCreator&) override;
     
 private:
     const std::string& _executable;
-    const std::string _testcase;
-    TestState _state;
-    std::vector<TestDataPtr> _tests;
+    std::vector<TestPtr> _tests;
 };
 
 

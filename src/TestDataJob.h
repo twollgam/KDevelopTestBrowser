@@ -2,14 +2,14 @@
 
 #include <kjob.h>
 
-#include "ITestData.h"
+#include "ITest.h"
 
 #include <QStandardItemModel>
 
 class TestDataJob : public KJob 
 {
 public:
-    TestDataJob(ITestData& testdata, const QList<QStandardItem*>& items);
+    TestDataJob(ITest& test, const QList<QStandardItem*>& items);
     ~TestDataJob() override = default;
     
     void start() override;
@@ -19,7 +19,7 @@ private:
     void executeTest();
     
 private:
-    ITestData& _testdata;
+    ITest& _test;
     QList<QStandardItem*> _items;
 };
 

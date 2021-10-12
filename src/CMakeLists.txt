@@ -1,9 +1,10 @@
 set(testbrowser_SRCS
     testbrowser.cpp
     testview.cpp
-    GoogleTestData.cpp
+    GoogleTest.cpp
     GoogleTestGroup.cpp
     GoogleTestRunner.cpp
+    GoogleTestSuite.cpp
     IconManager.cpp
     InfoTextDelegate.cpp
     TestDataJob.cpp

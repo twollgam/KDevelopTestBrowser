@@ -9,47 +9,21 @@
 #include "TestDataJob.h"
 #include "Roles.h"
 
-GoogleTestGroup::GoogleTestGroup(const std::string& executable, const std::string& testcase)
-: _executable(executable), _testcase(testcase)
+GoogleTestGroup::GoogleTestGroup(const std::string& executable, const std::string& name)
+: GoogleTest(executable, name), _executable(executable)
 {
 }
  
-std::string GoogleTestGroup::getProjectName() const 
-{
-    return {};
-}
-
-std::string GoogleTestGroup::getTestHostName() const
-{
-    return _executable;
-}
-
-
-std::string GoogleTestGroup::getTestCaseName() const
-{
-    return _testcase;
-}
-
-std::string GoogleTestGroup::getTestName() const
-{
-    return {};
-}
-
-TestState GoogleTestGroup::getState() const
-{
-    return _state;
-}
-
 namespace
 {
-    bool testsAreRunning(const std::vector<TestDataPtr>& tests)
+    bool testsAreRunning(const std::vector<TestPtr>& tests)
     {
-        return std::any_of(tests.begin(), tests.end(), [](const TestDataPtr& test) { return test->getState().state != TestState::State::Stopped; });
+        return std::any_of(tests.begin(), tests.end(), [](const TestPtr& test) { return test->getState().state != TestState::State::Stopped; });
     }
     
-    size_t countExecuted(const std::vector<TestDataPtr>& tests)
+    size_t countExecuted(const std::vector<TestPtr>& tests)
     {
-        return std::count_if(tests.begin(), tests.end(), [](const TestDataPtr& test) 
+        return std::count_if(tests.begin(), tests.end(), [](const TestPtr& test) 
             { 
                 const auto& state = test->getState();
                 
@@ -57,9 +31,9 @@ namespace
             });
     }    
     
-    size_t countSuccess(const std::vector<TestDataPtr>& tests)
+    size_t countSuccess(const std::vector<TestPtr>& tests)
     {
-        return std::count_if(tests.begin(), tests.end(), [](const TestDataPtr& test) 
+        return std::count_if(tests.begin(), tests.end(), [](const TestPtr& test) 
             { 
                 const auto& state = test->getState();
                 
@@ -67,9 +41,9 @@ namespace
             });
     }
     
-    size_t countFailed(const std::vector<TestDataPtr>& tests)
+    size_t countFailed(const std::vector<TestPtr>& tests)
     {
-        return std::count_if(tests.begin(), tests.end(), [](const TestDataPtr& test) 
+        return std::count_if(tests.begin(), tests.end(), [](const TestPtr& test) 
             { 
                 const auto& state = test->getState();
                 
@@ -77,9 +51,9 @@ namespace
             });
     }
     
-    size_t countSkipped(const std::vector<TestDataPtr>& tests)
+    size_t countSkipped(const std::vector<TestPtr>& tests)
     {
-        return std::count_if(tests.begin(), tests.end(), [](const TestDataPtr& test) 
+        return std::count_if(tests.begin(), tests.end(), [](const TestPtr& test) 
             { 
                 const auto& state = test->getState();
                 
@@ -91,7 +65,7 @@ namespace
 
 std::string GoogleTestGroup::getHtmlDetailMessage() const
 {   
-    const auto header = "Details of group: <b>" + getTestCaseName() + "</b><br><br>";
+    const auto header = "Details of group: <b>" + getName() + "</b><br><br>";
 
     for(const auto& test : _tests)
         trace("test: " + std::to_string(size_t(test.get())));
@@ -114,51 +88,30 @@ std::string GoogleTestGroup::getHtmlDetailMessage() const
 
 void GoogleTestGroup::start() 
 {
-    _state.state = TestState::State::Started;
-    _state.result = TestState::Result::NotRun;
+    GoogleTest::start();
 }
 
 void GoogleTestGroup::execute() 
-{
-}
-
-namespace
-{
-    QList<QStandardItem*> createItemList(QStandardItem* item)
-    {
-        const auto parent = item->parent();
-
-        return QList<QStandardItem*>() << item << parent->child(item->row(), 1) << parent->child(item->row(), 2);
-    }
-}
-
-std::list<KJob *> GoogleTestGroup::createJobs(QStandardItem* item)
-{
-    auto jobs = std::list<KJob*>();
-    
-    auto parent = item;
-    
-    for(auto i = 0; i < parent->rowCount(); ++i)
-    {
-        auto item = parent->child(i);
-
-        if(item->data(TestDataRole).isValid())
-        {
-            trace("has TestData");
-            auto testdata = item->data(TestDataRole).value<TestDataPtr>();
-            trace("has TestData");
+{   
+    const auto duration = std::accumulate(_tests.begin(), _tests.end(), 0UL, [](unsigned sum, TestPtr test){ return sum + test->getState().durationInMilliseconds; });
+    const auto text = (duration == 0 ? std::string{"< 1"} : std::to_string(duration)) + " ms";
             
-            if(testdata)
-                jobs.push_back(new TestDataJob(*testdata, createItemList(item)));
-        }
-    }
+    setTime(text);
     
-    return jobs;
+    getParent()->execute();
 }
 
-
-void GoogleTestGroup::addTest(const TestDataPtr& test)
+void GoogleTestGroup::addTest(const TestPtr& test)
 {
     _tests.emplace_back(test);
+}
+
+std::list<TestPtr> GoogleTestGroup::getChildren() const
+{
+    return std::list<TestPtr>(_tests.begin(), _tests.end());
+}
+
+void GoogleTestGroup::updateChildren(const TestNameProvider&, const TestCreator&)
+{
 }
 
