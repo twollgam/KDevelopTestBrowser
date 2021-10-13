@@ -1,4 +1,4 @@
-#include "testview.h"
+#include "TestView.h"
 #include "testbrowser.h"
 #include "IconManager.h"
 #include "Roles.h"
@@ -61,7 +61,7 @@
 using KDevelop::ICore;
 
 TestView::TestView(TestBrowser* plugin, QWidget* parent)
-: QWidget(parent), m_plugin(plugin), m_tree(new TreeView(this)), _textBrowser(new QTextBrowser(this))
+: QWidget(parent), m_plugin(plugin), m_tree(new TreeView(this)), _textBrowser(new TextBrowser(this))
 #if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
 , m_filter(new QSortFilterProxyModel(this))
 #else

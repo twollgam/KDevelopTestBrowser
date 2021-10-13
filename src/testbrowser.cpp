@@ -1,5 +1,5 @@
 #include "testbrowser.h"
-#include "testview.h"
+#include "TestView.h"
 
 #include <debug.h>
 #include <interfaces/icore.h>

@@ -12,24 +12,32 @@ GoogleTestSuite::GoogleTestSuite(const std::string& executable, const std::strin
 
 std::string GoogleTestSuite::getHtmlDetailMessage() const
 {
-    const auto header = "Details of suite: <b>" + getName() + "</b><br><br>";
+    const auto children = getChildren();
+    const auto groups = children.size();
+    const auto tests = std::accumulate(children.begin(), children.end(), 0UL, [](unsigned sum, const TestPtr& test) { return sum + test->getChildren().size();});
+    const auto header = "<h3>Suite Details</h3><h4>" + getName() + "</h4>"
+        + " Groups in suite: " + std::to_string(groups) + "<br>"
+        + " Tests in suite: " + std::to_string(tests) + "<br>";
+    
+    const auto state = getState();
 
+    if(state.state != TestState::State::Stopped)
+        return header + "Tests are running";
+    
     return header;
 /*
-    if(testsAreRunning(_tests))
-        return header + "Test are running";
-    
     const auto executed = countExecuted(_tests);
     const auto success = countSuccess(_tests);
     const auto failed = countFailed(_tests);
     const auto skipped = countSkipped(_tests);
     
     return header + 
-        std::to_string(_tests.size()) + " tests in group<br>" +
-        std::to_string(executed) + " tests executed<br>" +
-        std::to_string(skipped) + " tests skipped<br>" +
-        std::to_string(success) + " tests sucess<br>" +
-        std::to_string(failed) + " tests failed" ;
+        "&nbsp;&nbsp;<img src=\"Clock\">&nbsp;&nbsp;" + std::to_string(state.durationInMilliseconds) + " ms<br><br>" +
+        "Results:<br>" +
+        //std::to_string(executed) + " tests executed<br>" +
+        "&nbsp;&nbsp;<img src=\"Passed\">&nbsp;&nbsp;" + std::to_string(success) + " tests passed<br>" +
+        "&nbsp;&nbsp;<img src=\"Error\">&nbsp;&nbsp;" + std::to_string(failed) + " tests failed<br>" +
+        "&nbsp;&nbsp;<img src=\"Skipped\">&nbsp;&nbsp;" + std::to_string(skipped) + " tests skipped<br>";
 */
 }
 

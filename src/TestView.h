@@ -4,8 +4,8 @@
 #include <interfaces/itestcontroller.h>
 #include <project/projectmodel.h>
 #include "ITestRunner.h"
+#include "TextBrowser.h"
 #include "TreeView.h"
-#include <QTextBrowser>
 
 #include <regex>
 
@@ -60,7 +60,7 @@ private:
 private:
     TestBrowser* m_plugin;
     TreeView* m_tree;
-    QTextBrowser* _textBrowser;
+    TextBrowser* _textBrowser;
     QStandardItemModel* m_model;
     QSortFilterProxyModel* m_filter;
     QList<QAction*> m_contextMenuActions;

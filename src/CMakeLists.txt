@@ -1,6 +1,6 @@
 set(testbrowser_SRCS
     testbrowser.cpp
-    testview.cpp
+    TestView.cpp
     GoogleTest.cpp
     GoogleTestGroup.cpp
     GoogleTestRunner.cpp
@@ -9,6 +9,7 @@ set(testbrowser_SRCS
     InfoTextDelegate.cpp
     TestDataJob.cpp
     TestFactory.cpp
+    TextBrowser.cpp
     TreeView.cpp
     utilities.cpp
 )

@@ -92,25 +92,25 @@ TestState GoogleTestGroup::getState() const
 
 std::string GoogleTestGroup::getHtmlDetailMessage() const
 {   
-    const auto header = "Details of group: <b>" + getName() + "</b><br><br>";
-
-    for(const auto& test : _tests)
-        trace("test: " + std::to_string(size_t(test.get())));
-
+    const auto header = "<h3>Group Details</h3><h4>" + getName() + "</h4>"
+        + " Tests in group: "+ std::to_string(_tests.size()) + "<br>";
+    
     if(testsAreRunning(_tests))
-        return header + "Test are running";
+        return header + "Tests are running";
     
     const auto executed = countExecuted(_tests);
     const auto success = countSuccess(_tests);
     const auto failed = countFailed(_tests);
     const auto skipped = countSkipped(_tests);
+    const auto state = getState();
     
     return header + 
-        std::to_string(_tests.size()) + " tests in group<br>" +
-        std::to_string(executed) + " tests executed<br>" +
-        std::to_string(skipped) + " tests skipped<br>" +
-        std::to_string(success) + " tests sucess<br>" +
-        std::to_string(failed) + " tests failed" ;
+        "&nbsp;&nbsp;<img src=\"Clock\">&nbsp;&nbsp;" + std::to_string(state.durationInMilliseconds) + " ms<br><br>" +
+        "Results:<br>" +
+        //std::to_string(executed) + " tests executed<br>" +
+        "&nbsp;&nbsp;<img src=\"Passed\">&nbsp;&nbsp;" + std::to_string(success) + " tests passed<br>" +
+        "&nbsp;&nbsp;<img src=\"Error\">&nbsp;&nbsp;" + std::to_string(failed) + " tests failed<br>" +
+        "&nbsp;&nbsp;<img src=\"Skipped\">&nbsp;&nbsp;" + std::to_string(skipped) + " tests skipped<br>";
 }
 
 void GoogleTestGroup::execute() 

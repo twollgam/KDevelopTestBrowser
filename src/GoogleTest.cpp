@@ -44,7 +44,8 @@ namespace
                     const auto url = html.substr(position, endPosition - position);
                     
                     //trace("url: " + url);
-                    
+                                        
+                    html.replace(endPosition, 1, "<br>");
                     html.insert(endPosition, "</a>");
                     html.insert(position, "<a href=\"" + url + "\">");
                     
@@ -68,27 +69,39 @@ namespace
         //trace("html: " + html);
         return html;
     }
-
+    
+    std::string getDuration(const TestState& state, bool html = false)
+    {
+        auto duration = std::string{"na"};
+        
+        if(state.result == TestState::Result::Error || state.result == TestState::Result::Passed)
+            duration = (state.durationInMilliseconds == 0 ? (html ? std::string{"&lt; 1"} : std::string{"< 1"}) : std::to_string(state.durationInMilliseconds)) + " ms";
+        
+        return duration;
+    }
 }
 
 std::string GoogleTest::getHtmlDetailMessage() const
 {
-    const auto header = "Details of test: <b>" + getParent()->getName() + "." + getName() + "</b><br><br>";
+    const auto header = "<h3>Test Details</h3>\n"
+        "<h4>" + getParent()->getName() + "." + getName() + "</h4><br>\n";
 
     if(_state.state != TestState::State::Stopped)
-        return header + "Running";
-    
-    if(_state.result == TestState::Result::Error)
-        return header + "Test failed<br><br>" + toHtml(_state.message);
-    
-    if(_state.result == TestState::Result::Passed)
-        return header + "Test success<br><br>" + toHtml(_state.message);
-    
-    if(_state.result == TestState::Result::Skipped)
-        return header + "Test skipped<br><br>" + toHtml(_state.message);
+        return header + "&nbsp;&nbsp;<img src=\"Running\">&nbsp;&nbsp;running";
 
     if(_state.result == TestState::Result::NotRun)
-        return header + "Test not run<br><br>" + toHtml(_state.message);
+        return header + "&nbsp;&nbsp;<img src=\"NotRun\">&nbsp;&nbsp;not run<br>" + toHtml(_state.message);
+    
+    if(_state.result == TestState::Result::Skipped)
+        return header + "&nbsp;&nbsp;<img src=\"Skipped\">&nbsp;&nbsp;skipped<br>" + toHtml(_state.message);
+
+    const auto duration = "&nbsp;&nbsp;<img src=\"Clock\">&nbsp;&nbsp;Duration: " + getDuration(_state, true) + "<br><br>";
+    
+    if(_state.result == TestState::Result::Error)
+        return header + "&nbsp;&nbsp;<img src=\"Error\">&nbsp;&nbsp;failed<br>" + duration + toHtml(_state.message);
+    
+    if(_state.result == TestState::Result::Passed)
+        return header + "&nbsp;&nbsp;<img src=\"Passed\">&nbsp;&nbsp;passed<br>" + duration + toHtml(_state.message);
 
     return header + "Unknown";
 }
@@ -224,13 +237,8 @@ void GoogleTest::execute()
     auto&& output = std::stringstream(process.readAll().toStdString());
     
     _state = ::getState(id, output);
-    
-    auto time = std::string{"na"};
-    
-    if(_state.result == TestState::Result::Error || _state.result == TestState::Result::Passed)
-        time = (_state.durationInMilliseconds == 0 ? std::string{"< 1"} : std::to_string(_state.durationInMilliseconds)) + " ms";
-    
-    setTime(time);
+        
+    setTime(getDuration(_state));
     
     getParent()->execute();
 }
