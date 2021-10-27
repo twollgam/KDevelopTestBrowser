@@ -8,6 +8,9 @@
 #include "TreeView.h"
 
 #include <regex>
+#include <set>
+#include "ITestFilter.h"
+#include "SelectAll.h"
 
 class TestBrowser;
 
@@ -41,7 +44,9 @@ public Q_SLOTS:
     QList<QAction*> contextMenuActions();
 
 private:
+    void runTests(const std::set<QStandardItem*>& items, const ITestFilter& = SelectAll());
     void runSelectedTests();
+    void runFailedTests();
     void debugSelectedTests();
     void reload();
     void changeFilter(const QString &newFilter);
@@ -57,6 +62,8 @@ private:
     QStandardItem* itemForSuite(KDevelop::ITestSuite* suite);
     QStandardItem* itemForProject(KDevelop::IProject* project);
     
+    std::set<QStandardItem*> getSelectedItems(const QList<QModelIndex>& indexes);
+
 private:
     TestBrowser* m_plugin;
     TreeView* m_tree;

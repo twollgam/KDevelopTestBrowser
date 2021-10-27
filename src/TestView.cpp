@@ -57,6 +57,7 @@
 
 #include <algorithm>
 #include <regex>
+#include "SelectFailed.h"
 
 using KDevelop::ICore;
 
@@ -111,9 +112,13 @@ TestView::TestView(TestBrowser* plugin, QWidget* parent)
     connect (showSourceAction, &QAction::triggered, this, [&](){ showSource(); });
     m_contextMenuActions << showSourceAction;
 
-    auto runTest = new QAction(i18nc("@action:inmenu", "Run Test"), this );
+    auto runTest = new QAction(i18nc("@action:inmenu", "Run Tests"), this );
     connect (runTest, &QAction::triggered, this, &TestView::runSelectedTests);
     m_contextMenuActions << runTest;
+    
+    auto runFailedTest = new QAction(i18nc("@action:inmenu", "Run Failed Tests"), this );
+    connect (runFailedTest, &QAction::triggered, this, &TestView::runFailedTests);
+    m_contextMenuActions << runFailedTest;
     
     auto debugTest = new QAction( QIcon::fromTheme(QStringLiteral("system-debug")), i18nc("@action:inmenu", "Debug Test"), this );
     connect(debugTest, &QAction::triggered, this, &TestView::debugSelectedTests);
@@ -550,19 +555,26 @@ void TestView::debugSelectedTests()
 
 namespace
 {
-    std::set<TestPtr> collectTests(TestPtr test)
+    std::set<TestPtr> collectTests(TestPtr test, const ITestFilter& filter)
     {
+        trace("collectTests: " + test->getName());
+        
         auto tests = std::set<TestPtr>();
         
         if(test->getChildren().empty())
-            tests.emplace(test);
+        {
+            if(filter(test))
+                tests.emplace(test);
+        }
         else
         {
             for(auto& child : test->getChildren())
             {
-                const auto children = collectTests(child);
+                const auto children = collectTests(child, filter);
                 
-                std::copy(children.begin(), children.end(), std::inserter(tests, tests.begin()));
+                std::copy_if(children.begin(), children.end(), std::inserter(tests, tests.begin()),
+                    [&filter](TestPtr test){ return filter(test);}
+                );
             }
         }
         
@@ -584,6 +596,50 @@ namespace
     }
 }
 
+std::set<QStandardItem*> TestView::getSelectedItems(const QList<QModelIndex>& indexes)
+{
+    auto result = std::set<QStandardItem*>();
+    
+    for (const auto& idx : qAsConst(indexes)) 
+    {
+        auto index = m_filter->mapToSource(idx);
+        
+        trace("index column: " + std::to_string(index.column()));
+        if(index.column() > 0)
+            continue;
+    
+        if (index.parent().isValid() && indexes.contains(index.parent()))
+            continue;
+
+        auto item = m_model->itemFromIndex(index);
+        
+        if(item)
+            result.insert(item);
+    }
+    
+    return result;
+}
+
+void TestView::runFailedTests()
+{
+    trace("runFailedTests");
+    
+    auto indexes = m_tree->selectionModel()->selectedIndexes();
+    if (indexes.isEmpty())
+    {
+        //if there's no selection we'll run all of them (or only the filtered)
+        //in case there's a filter.
+        const auto rc = m_filter->rowCount();
+        indexes.reserve(rc);
+        for(int i = 0; i < rc; ++i)
+            indexes << m_filter->index(i, 0);
+    }
+
+    const auto items = getSelectedItems(indexes);
+
+    runTests(items, SelectFailed());
+}
+
 void TestView::runSelectedTests()
 {
     auto indexes = m_tree->selectionModel()->selectedIndexes();
@@ -591,14 +647,20 @@ void TestView::runSelectedTests()
     {
         //if there's no selection we'll run all of them (or only the filtered)
         //in case there's a filter.
-        const int rc = m_filter->rowCount();
+        const auto rc = m_filter->rowCount();
         indexes.reserve(rc);
-        for(int i=0; i<rc; ++i) {
+        for(int i = 0; i < rc; ++i)
             indexes << m_filter->index(i, 0);
-        }
     }
 
-    QList<KJob*> jobs;
+    const auto items = getSelectedItems(indexes);
+
+    runTests(items);
+}
+
+void TestView::runTests(const std::set<QStandardItem*>& items, const ITestFilter& filter)
+{
+    auto jobs = QList<KJob*>();
     auto tc = ICore::self()->testController();
 
     /*
@@ -609,53 +671,61 @@ void TestView::runSelectedTests()
      * This is the somewhat-intuitive approach. Maybe a configuration should be offered.
      */
 
-    for (const QModelIndex& idx : qAsConst(indexes)) 
+    for (const auto& item : items) 
     {
-        QModelIndex index = m_filter->mapToSource(idx);
-        if (index.parent().isValid() && indexes.contains(index.parent()))
-            continue;
+        trace("item: " + item->text().toStdString());
 
-        auto item = m_model->itemFromIndex(index);
         if(item->data(TestDataRole).isValid())
         {
-            trace("has Test");
             auto test = item->data(TestDataRole).value<TestPtr>();
+
+            trace("has testdata: " + test->getName());
             
             if(test)
             {
                 trace("create jobs");
                 
-                const auto tests = collectTests(test);
+                const auto tests = collectTests(test, filter);
                 
                 for(const auto& test : tests)
                     jobs << createJob(test);
             }
         }
-        else if (item->parent() == nullptr)
-        {
-            // A project was selected
-            auto project = ICore::self()->projectController()->findProjectByName(item->data(ProjectRole).toString());
-            const auto suites = tc->testSuitesForProject(project);
-            for (auto suite : suites) {
-                jobs << suite->launchAllCases(KDevelop::ITestSuite::Silent);
-            }
-        }
-        else if (item->parent()->parent() == nullptr)
-        {
-            // A suite was selected
-            auto project = ICore::self()->projectController()->findProjectByName(item->parent()->data(ProjectRole).toString());
-            auto suite =  tc->findTestSuite(project, item->data(SuiteRole).toString());
-            jobs << suite->launchAllCases(KDevelop::ITestSuite::Verbose);
-        }
         else
         {
-            // This was a single test case
-            auto project = ICore::self()->projectController()->findProjectByName(item->parent()->parent()->data(ProjectRole).toString());
-            auto suite = tc->findTestSuite(project, item->parent()->data(SuiteRole).toString());
-            const auto testCase = item->data(CaseRole).toString();
+            trace("has no testdata");
             
-            if(suite)
-                jobs << suite->launchCase(testCase, KDevelop::ITestSuite::Verbose);
+            if (item->parent() == nullptr)
+            {
+                trace("project: " + item->data(ProjectRole).toString().toStdString());
+                // A project was selected
+                auto project = ICore::self()->projectController()->findProjectByName(item->data(ProjectRole).toString());
+                const auto suites = tc->testSuitesForProject(project);
+                for (auto suite : suites) {
+                    jobs << suite->launchAllCases(KDevelop::ITestSuite::Silent);
+                }
+            }
+            else if (item->parent()->parent() == nullptr)
+            {
+                trace("project: " + item->parent()->data(ProjectRole).toString().toStdString());
+                trace("suite: " + item->data(SuiteRole).toString().toStdString());
+                // A suite was selected
+                auto project = ICore::self()->projectController()->findProjectByName(item->parent()->data(ProjectRole).toString());
+                auto suite = tc->findTestSuite(project, item->data(SuiteRole).toString());
+                
+                if(suite)
+                    jobs << suite->launchAllCases(KDevelop::ITestSuite::Verbose);
+            }
+            else
+            {
+                // This was a single test case
+                auto project = ICore::self()->projectController()->findProjectByName(item->parent()->parent()->data(ProjectRole).toString());
+                auto suite = tc->findTestSuite(project, item->parent()->data(SuiteRole).toString());
+                const auto testCase = item->data(CaseRole).toString();
+                
+                if(suite)
+                    jobs << suite->launchCase(testCase, KDevelop::ITestSuite::Verbose);
+            }
         }
     }
 

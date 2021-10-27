@@ -115,6 +115,8 @@ std::string GoogleTestGroup::getHtmlDetailMessage() const
 
 void GoogleTestGroup::execute() 
 {
+    trace("GoogleTestGroup::execute: " + getName());
+    
     const auto state = getState();
     
     setIcon(IconManager().getIcon(state));

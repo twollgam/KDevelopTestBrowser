@@ -7,6 +7,8 @@ set(testbrowser_SRCS
     GoogleTestSuite.cpp
     IconManager.cpp
     InfoTextDelegate.cpp
+    SelectAll.cpp
+    SelectFailed.cpp
     TestDataJob.cpp
     TestFactory.cpp
     TextBrowser.cpp
